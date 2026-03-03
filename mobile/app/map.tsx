@@ -90,12 +90,23 @@ export default function Map() {
       const response = await fetchNearbyPlaces(
         latitude,
         longitude,
-        selectedType
+        selectedType === "Restaurant" ? "Restaurant" : null
       );
-
+      // console.log("Places API response:", response);
+      
       const { results } = response;
 
-      const formatted: Place[] = results.map(
+      let filteredResults = results;
+
+      if (selectedType === null) {
+        filteredResults = results.filter(
+          (place: any) => place.type !== "Restaurant"
+        );
+      }
+
+      // console.log("Filtered places:", filteredResults);
+
+      const formatted: Place[] = filteredResults.map(
         (place: any) => {
           const placeLat =
             place.location.coordinates[1];
@@ -141,6 +152,7 @@ export default function Map() {
       console.log("AI URL:", `${BASE_API_URL}/ai/${placeId}`);
 
       const response = await api.get(`/ai/${placeId}`);
+      console.log("AI response:", response.data);
 
       if (response.data.success) {
         setAiDetails(response.data.data);
@@ -220,6 +232,11 @@ export default function Map() {
               longitude: place.longitude,
             }}
             title={place.name}
+             pinColor={
+              place.type === "Restaurant"
+                ? "orange"
+                : "red"
+            }
             onPress={() => {
               // 🔥 Prevent duplicate AI calls
               if (selectedPlace?.id !== place.id) {
@@ -245,7 +262,7 @@ export default function Map() {
         <View className="absolute bottom-6 left-5 right-5 bg-white p-4 rounded-2xl shadow-xl max-h-[65%]">
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text className="text-gray-500 mt-1">
-              ⭐ {selectedPlace.rating} • {selectedPlace.type}
+              {selectedPlace.type === "Restaurant" ? "🍽" : "📍"} ⭐ {selectedPlace.rating} • {selectedPlace.type}
             </Text>
 
             <Text className="text-gray-400 mt-1">
