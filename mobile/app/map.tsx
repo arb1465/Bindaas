@@ -131,6 +131,8 @@ export default function Map() {
         }
       );
 
+      // formatted.sort((a, b) => a.distance - b.distance);
+
       setPlaces(formatted);
     } catch (err: any) {
       setError("Failed to fetch nearby places\n" + (err.message || ""));
@@ -152,7 +154,7 @@ export default function Map() {
       console.log("AI URL:", `${BASE_API_URL}/ai/${placeId}`);
 
       const response = await api.get(`/ai/${placeId}`);
-      console.log("AI response:", response.data);
+      // console.log("AI response:", response.data);
 
       if (response.data.success) {
         setAiDetails(response.data.data);
@@ -184,7 +186,7 @@ export default function Map() {
 
   return (
     <View className="flex-1">
-      <View className="absolute top-16 left-5 right-5 flex-row justify-between bg-white rounded-xl p-2 shadow-md z-50">
+      <View className="absolute top-4 left-5 right-5 flex-row justify-between bg-white rounded-xl p-2 shadow-md z-50">
         <Pressable
           onPress={() => setSelectedType(null)}
           className={`flex-1 py-2 rounded-lg ${
@@ -248,6 +250,59 @@ export default function Map() {
         ))}
       </MapView>
 
+      {/* 🔥 Horizontal Scroll */}
+      <View className="absolute bottom-5 left-0 right-0 pb-2">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="px-3"
+        >
+          {places.map((place) => (
+            <Pressable
+              key={place.id}
+              className="bg-white rounded-xl shadow-md mr-3 p-3 w-56"
+              onPress={() => {
+                setSelectedPlace(place);
+
+                mapRef.current?.animateToRegion(
+                  {
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  },
+                  500
+                );
+
+                fetchAIDetails(place.id);
+              }}
+            >
+              <Text className="font-semibold text-lg">
+                {place.name}
+              </Text>
+
+              <Text className="text-gray-500 mt-1">
+                ⭐ {place.rating} • {place.type}
+              </Text>
+
+              <Text className="text-gray-400 mt-1">
+                📍 {place.distance} km away
+              </Text>
+
+              <Text
+                className={`mt-1 font-medium ${
+                  place.open_now
+                    ? "text-green-600"
+                    : "text-red-500"
+                }`}
+              >
+                {place.open_now ? "Open Now" : "Closed"}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
       {/* No places */}
       {places.length === 0 && (
         <View className="absolute top-20 left-5 right-5 bg-white p-4 rounded-xl shadow-md">
@@ -259,7 +314,7 @@ export default function Map() {
 
       {/* 🔥 Bottom Card */}
       {selectedPlace && (
-        <View className="absolute bottom-6 left-5 right-5 bg-white p-4 rounded-2xl shadow-xl max-h-[65%]">
+        <View className="absolute bottom-52 left-5 right-5 bg-white p-4 rounded-2xl shadow-xl max-h-[65%]">
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text className="text-gray-500 mt-1">
               {selectedPlace.type === "Restaurant" ? "🍽" : "📍"} ⭐ {selectedPlace.rating} • {selectedPlace.type}
