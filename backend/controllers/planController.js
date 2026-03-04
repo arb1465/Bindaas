@@ -1,10 +1,20 @@
 const rankingService = require("../services/rankingService");
 const { getDistanceMeters } = require("../utils/distanceCalc");
+const googleService = require("../services/googlePlacesService");
+const { fetchNearbyFromGoogle } = require("../services/googlePlacesService");
+const { generateItineraryAI } = require("../services/openaiService");
 
 exports.generateItinerary = async (req, res) => {
   try {
     const { lat, lng, totalTimeHours = 6 } = req.body;
 
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing coordinates"
+      });
+    }
+    
     // 1. Get the best places using your existing service
     const rawPlaces = await googleService.fetchNearbyFromGoogle(lat, lng);
     const rankedPlaces = rankingService.rankPlaces(rawPlaces);
