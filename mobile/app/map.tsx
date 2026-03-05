@@ -10,6 +10,7 @@ import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import type { LocationObjectCoords } from "expo-location";
 import { fetchNearbyPlaces } from "../services/placesService";
+import { generatePlan } from "@/services/planService";
 import { api } from "@/services/api";
 
 type Place = {
@@ -66,6 +67,9 @@ export default function Map() {
 
   const [aiDetails, setAiDetails] = useState<AIDetails | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+
+  const [itinerary, setItinerary] = useState<any[]>([]);
+  const [planLoading, setPlanLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +170,29 @@ export default function Map() {
     }
   };
 
+  const handleGeneratePlan = async () => {
+    if (!location) return;
+
+    try {
+      setPlanLoading(true);
+
+      const response = await generatePlan(
+        location.latitude,
+        location.longitude,
+        3 // hours
+      );
+
+      if (response.success) {
+        setItinerary(response.plan);
+      }
+
+    } catch (error) {
+      console.log("Plan error:", error);
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center">
@@ -186,6 +213,7 @@ export default function Map() {
 
   return (
     <View className="flex-1">
+      { /*🔥 Filter Buttons */ }
       <View className="absolute top-4 left-5 right-5 flex-row justify-between bg-white rounded-xl p-2 shadow-md z-50">
         <Pressable
           onPress={() => setSelectedType(null)}
@@ -214,7 +242,24 @@ export default function Map() {
         </Pressable>
       </View>
 
+      { /*🔥 Plan Button */ }
+      <View className="absolute top-20 left-5 right-5 z-50">
+        <Pressable
+          onPress={handleGeneratePlan}
+          className="bg-blue-600 py-3 rounded-xl shadow-md"
+        >
+          {planLoading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text className="text-white text-center font-semibold">
+              🧠 Plan My Trip
+            </Text>
+          )}
+        </Pressable>
+      </View>
+      
 
+      { /* Map */ }
       <MapView
         ref={mapRef}
         style={{ flex: 1 }}
@@ -249,6 +294,20 @@ export default function Map() {
           />
         ))}
       </MapView>
+
+      {itinerary.length > 0 && (
+        <View className="absolute top-20 left-5 right-5 bg-white p-4 rounded-xl shadow-lg">
+          <Text className="text-lg font-bold mb-2">
+            AI Travel Plan
+          </Text>
+
+          {itinerary.map((place, index) => (
+            <Text key={index} className="text-gray-700 mb-1">
+              {index + 1}. {place.name} {place.visit_time}
+            </Text>
+          ))}
+        </View>
+      )}
 
       {/* 🔥 Horizontal Scroll */}
       <View className="absolute bottom-5 left-0 right-0 pb-2">
