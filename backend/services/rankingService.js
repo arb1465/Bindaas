@@ -22,7 +22,7 @@ exports.rankPlaces = (places) => {
       }
 
       return {
-        ...place._doc,
+        ...place,
         relevance_score: parseFloat(finalScore.toFixed(2)),
       };
     })
