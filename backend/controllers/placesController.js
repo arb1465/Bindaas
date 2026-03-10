@@ -1,12 +1,9 @@
 const Place = require("../models/Place");
 const googleService = require("../services/googlePlacesService");
 const rankingService = require("../services/rankingService");
+const classifyPlace = require("../utils/classifyPlace");
 
-// Inside your getNearbyAttractions function, change the last line:
-
-
-// @desc    Get all manual places from our MongoDB
-// @route   GET /api/places
+// --------------------------- GET ALL MANUAL PLACES ---------------------------
 exports.getAllPlaces = async (req, res) => {
   try {
     const places = await Place.find();
@@ -24,8 +21,7 @@ exports.getAllPlaces = async (req, res) => {
   }
 };
 
-// @desc    Get places nearby from MongoDB (Manual Data)
-// @route   GET /api/nearby
+// --------------------------- GET NEARBY MANUAL PLACES ---------------------------
 exports.getNearbyPlaces = async (req, res) => {
   try {
     const { lat, lng, type } = req.query;
@@ -76,13 +72,10 @@ exports.getNearbyPlaces = async (req, res) => {
   }
 };
 
-// @desc    Get REAL places from Google API (Week 2 Core)
-// @route   GET /api/google-nearby
-// @desc    Get REAL places from Google API + RANKED (Week 2 Core)
-// @route   GET /api/google-nearby
+// --------------------------- GET REAL GOOGLE NEARBY PLACES ---------------------------
 exports.getRealNearbyPlaces = async (req, res) => {
   try {
-    const { lat, lng, type } = req.query;
+    const { lat, lng, type, category } = req.query;
 
     if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
       return res.status(400).json({
@@ -91,31 +84,68 @@ exports.getRealNearbyPlaces = async (req, res) => {
       });
     }
 
-    const googleResults = await googleService.fetchNearbyFromGoogle(lat, lng, type);
+    // Fetch from Google
+    const googleResults = await googleService.fetchNearbyFromGoogle(
+      parseFloat(lat),
+      parseFloat(lng),
+      type,
+    );
+    console.log(
+      googleResults.map((p) => ({
+        name: p.name,
+        user_ratings_total: p.user_ratings_total,
+        rating: p.rating,
+      })),
+    );
 
-    // 1. CLEANING DATA
-    const cleanedResults = googleResults.map((place) => ({
-      place_id: place.place_id,
-      name: place.name,
-      rating: place.rating || 0,
-      total_ratings: place.user_ratings_total || 0, // IMPORTANT: Need this for ranking!
-      address: place.vicinity,
-      types: place.types,
-      is_open: place.opening_hours ? place.opening_hours.open_now : "Unknown",
-      photo_reference: place.photos ? place.photos[0].photo_reference : null,
-      location: place.geometry.location,
-    }));
+    console.log("First Place from Google:", googleResults[0]);
 
-    // 2. RANKING DATA (The Day 13 Change)
-    // We pass our cleaned list to the service to calculate scores and sort them
-    const rankedResults = rankingService.rankPlaces(cleanedResults);
+    // Map and classify
+    const cleanedResults = googleResults.map((place) => {
+      const categoryName = classifyPlace(place.types);
+
+      return {
+        name: place.name,
+        rating: place.rating || 0,
+        total_ratings: place.user_ratings_total || 1, // <- important fix
+        address: place.vicinity || "",
+        types: place.types || [],
+        category: categoryName,
+        is_open: place.opening_hours?.open_now ?? "Unknown",
+        photo: place.photos ? place.photos[0]?.photo_reference : null,
+        location: place.geometry?.location || null,
+      };
+    });
+
+    console.log(
+      "Classified Places with ratings:",
+      cleanedResults.map((p) => ({
+        name: p.name,
+        rating: p.rating,
+        total_ratings: p.total_ratings,
+        category: p.category,
+      })),
+    );
+
+    // Filter by user-selected category if any
+    const categoryFiltered =
+      category && category !== ""
+        ? cleanedResults.filter((p) => p.category === category)
+        : cleanedResults;
+
+    // Rank
+    const rankedResults = rankingService.rankPlaces(
+      categoryFiltered,
+      category ? [category] : [],
+    );
 
     res.status(200).json({
       success: true,
       count: rankedResults.length,
-      results: rankedResults, // Send the sorted list to Aasutosh
+      results: rankedResults,
     });
   } catch (error) {
+    console.error("Google Nearby Error:", error);
     res.status(500).json({
       success: false,
       message: "Google API or Ranking issues",
@@ -124,8 +154,7 @@ exports.getRealNearbyPlaces = async (req, res) => {
   }
 };
 
-// @desc    Get Deep Details for a specific place
-// @route   GET /api/place-details/:placeId
+// --------------------------- GET PLACE DETAILS ---------------------------
 exports.getPlaceDetails = async (req, res) => {
   try {
     const { placeId } = req.params;
@@ -137,7 +166,7 @@ exports.getPlaceDetails = async (req, res) => {
         .json({ success: false, message: "Place not found" });
     }
 
-    // Generate Direct Photo URL if available (Day 4 Task)
+    // Generate main photo URL if available
     if (details.photos && details.photos.length > 0) {
       details.main_photo_url = googleService.getPhotoUrl(
         details.photos[0].photo_reference,
@@ -149,6 +178,7 @@ exports.getPlaceDetails = async (req, res) => {
       results: details,
     });
   } catch (error) {
+    console.error("Place Details Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch place details",
