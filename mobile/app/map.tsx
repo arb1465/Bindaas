@@ -39,6 +39,13 @@ export default function Map() {
 
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    fetch(`${BASE_API_URL}/places`)
+      .then(res => res.json())
+      .then(data => console.log("Backend OK:", data))
+      .catch(err => console.log("Backend not reachable:", err));
+  }, []);
+
   // ---------------- FETCH PLACES ----------------
   const fetchPlaces = useCallback(async () => {
 
