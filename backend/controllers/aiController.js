@@ -1,6 +1,3 @@
-const Place = require("../models/Place");
-const { generatePlaceDetails } = require("../services/openaiService");
-
 exports.getAIPlaceDetails = async (req, res) => {
   try {
     const { id } = req.params;
@@ -14,8 +11,13 @@ exports.getAIPlaceDetails = async (req, res) => {
       });
     }
 
-    // 🔥 CHECK CACHE
-    if (place.ai_details && place.ai_details.generated_at) {
+    // ✅ STRONG CACHE CHECK
+    if (
+      place.ai_details &&
+      place.ai_details.generated_at &&
+      place.summary &&
+      place.description
+    ) {
       return res.json({
         success: true,
         cached: true,
@@ -23,10 +25,23 @@ exports.getAIPlaceDetails = async (req, res) => {
       });
     }
 
-    // 🔥 CALL OPENAI
-    const aiData = await generatePlaceDetails(place);
+    // ✅ FIX LOCATION FORMAT
+    const formattedPlace = {
+      ...place.toObject(),
+      location: {
+        lat: place.location.coordinates[1],
+        lng: place.location.coordinates[0],
+      },
+    };
 
-    // 🔥 SAVE TO DB
+    // 🔥 CALL OPENAI
+    const aiData = await generatePlaceDetails(formattedPlace);
+
+    // 🔥 MAP FIELDS
+    place.summary = aiData?.overview || "";
+    place.description = aiData?.travel_tips || "";
+    place.history = aiData?.highlights?.join("; ") || "";
+
     place.ai_details = {
       ...aiData,
       generated_at: new Date(),

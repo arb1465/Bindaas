@@ -10,26 +10,30 @@ exports.fetchNearbyFromGoogle = async (lat, lng, type, radius = 5000) => {
     const response = await axios.get(url);
     console.log("Google API Status:", response.data.status);
 
-    const places = response.data.results.map((place) => ({
-      name: place.name,
-      rating: place.rating || 0,
-      user_ratings_total: place.user_ratings_total || 0,
-      types: place.types || [],
+    const places = response.data.results
+      .slice(0, 10) // ✅ LIMIT RESULTS
+      .map((place) => ({
+        place_id: place.place_id || null, // ✅ SAFE
 
-      is_open: place.opening_hours ? place.opening_hours.open_now : true,
+        name: place.name,
+        rating: place.rating || 0,
+        user_ratings_total: place.user_ratings_total || 0,
+        types: place.types || [],
 
-      location: {
-        lat: place.geometry.location.lat,
-        lng: place.geometry.location.lng,
-      },
+        is_open: place.opening_hours?.open_now ?? "Unknown", // ✅ FIXED
 
-      address: place.vicinity || "",
+        location: {
+          lat: place.geometry?.location?.lat || null,
+          lng: place.geometry?.location?.lng || null,
+        },
 
-      photo:
-        place.photos && place.photos.length > 0
-          ? this.getPhotoUrl(place.photos[0].photo_reference)
-          : null,
-    }));
+        address: place.vicinity || "",
+
+        photo:
+          place.photos && place.photos.length > 0
+            ? exports.getPhotoUrl(place.photos[0].photo_reference) // ✅ FIXED
+            : null,
+      }));
 
     return places;
   } catch (error) {
@@ -51,12 +55,7 @@ exports.getPlaceDetailsFromGoogle = async (placeId) => {
     if (response.data.status !== "OK") {
       return null;
     }
-    console.log(
-      places.map((p) => ({
-        name: p.name,
-        types: p.types,
-      })),
-    );
+    
 
     return response.data.result;
   } catch (error) {
