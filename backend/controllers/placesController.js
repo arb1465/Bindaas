@@ -20,6 +20,7 @@ async function findNearbyPlaces(lat, lng) {
 
   return places;
 }
+
 exports.testInsert = async (req, res) => {
   try {
     const testPlace = {
@@ -96,7 +97,19 @@ exports.getNearbyPlaces = async (req, res) => {
 
     const places = await Place.find(query);
 
-    const plainPlaces = places.map((p) => p.toObject());
+    const plainPlaces = places.map((p) => {
+      const obj = p.toObject();
+
+      // 🔥 Normalize location here
+      if (obj.location?.coordinates) {
+        obj.location = {
+          lat: obj.location.coordinates[1],
+          lng: obj.location.coordinates[0],
+        };
+      }
+
+      return obj;
+    });
 
     const rankedPlaces = rankingService.rankPlaces(
       plainPlaces,
@@ -138,23 +151,41 @@ exports.getRealNearbyPlaces = async (req, res) => {
 
     // STEP 1: Check MongoDB for cached places
     const cachedPlaces = await findNearbyPlaces(latitude, longitude);
+    let filteredCached = cachedPlaces;
 
-   if (cachedPlaces.length > 0) {
-     const plainPlaces = cachedPlaces.map((p) => p.toObject());
+    if (category && category !== "") {
+      filteredCached = cachedPlaces.filter(
+        (p) => p.category?.toLowerCase() === category.toLowerCase(),
+      );
+    }
 
-     const rankedPlaces = rankingService.rankPlaces(
-       plainPlaces,
-       latitude,
-       longitude,
-     );
+    if (filteredCached.length > 0) {
+      const plainPlaces = filteredCached.map((p) => {
+        const obj = p.toObject();
 
-     return res.status(200).json({
-       success: true,
-       source: "database",
-       count: rankedPlaces.length,
-       results: rankedPlaces,
-     });
-   }
+        if (obj.location?.coordinates) {
+          obj.location = {
+            lat: obj.location.coordinates[1],
+            lng: obj.location.coordinates[0],
+          };
+        }
+
+        return obj;
+      });
+
+      const rankedPlaces = rankingService.rankPlaces(
+        plainPlaces,
+        latitude,
+        longitude,
+      );
+
+      return res.status(200).json({
+        success: true,
+        source: "database",
+        count: rankedPlaces.length,
+        results: rankedPlaces,
+      });
+    }
 
     // STEP 2: Fetch from Google Places API
     const googleResults = await googleService.fetchNearbyFromGoogle(
@@ -172,34 +203,35 @@ exports.getRealNearbyPlaces = async (req, res) => {
     );
 
     // STEP 3: Clean and classify results
-   const cleanedResults = googleResults
-     .map((place) => {
-       if (!place) return null;
+    const cleanedResults = googleResults
+      .map((place) => {
+        if (!place) return null;
 
-       const { category, subcategory } = classifyPlace(place.types || []);
+        const { category, subcategory } = classifyPlace(place.types || []);
 
-       const lat = place.location?.lat;
-       const lng = place.location?.lng;
+        const lat = place.location?.lat;
+        const lng = place.location?.lng;
 
-       return {
-         place_id: place.place_id,
-         name: place.name || "Unknown",
-         rating: place.rating || 0,
-         total_ratings: place.user_ratings_total || 1,
-         address: place.vicinity || "",
-         types: place.types || [],
-         category,
-         subcategory,
-         is_open: place.opening_hours?.open_now ?? "Unknown",
-         photo: place.photos ? place.photos[0]?.photo_reference : null,
+        return {
+          place_id: place.place_id,
+          name: place.name || "Unknown",
+          rating: place.rating || 0,
+          total_ratings: place.user_ratings_total || 1,
+          address: place.vicinity || "",
+          types: place.types || [],
+          category,
+          subcategory,
+          is_open: place.opening_hours?.open_now ?? "Unknown",
+          photo: place.photos ? place.photos[0]?.photo_reference : null,
 
-         location: {
-           lat: lat || null,
-           lng: lng || null,
-         },
-       };
-     })
-     .filter(Boolean);
+          location: {
+            lat: lat || null,
+            lng: lng || null,
+          },
+        };
+      })
+      .filter(Boolean);
+
     console.log(
       cleanedResults.map((p) => ({
         name: p.name,
@@ -207,30 +239,31 @@ exports.getRealNearbyPlaces = async (req, res) => {
         lng: p.location?.lng,
       })),
     );
-   await Promise.all(
-     cleanedResults.map(async (place) => {
-       try {
-         const aiData = await generatePlaceDetails(place);
 
-         place.summary = aiData?.overview || "";
-         place.description = aiData?.travel_tips || "";
-         place.history = aiData?.highlights?.join("; ") || "";
+    // Generating AI data and appending into DB
+    await Promise.all(
+      cleanedResults.map(async (place) => {
+        try {
+          const aiData = await generatePlaceDetails(place);
 
-         place.ai_details = {
-           ...aiData,
-           generated_at: new Date(),
-         };
-       } catch (err) {
-         console.error(`AI failed for ${place.name}:`, err.message);
+          place.summary = aiData?.overview || "";
+          place.description = aiData?.travel_tips || "";
+          place.history = aiData?.highlights?.join("; ") || "";
 
-         place.summary = "";
-         place.description = "";
-         place.history = "";
-         place.ai_details = null;
-       }
-     }),
-   );
+          place.ai_details = {
+            ...aiData,
+            generated_at: new Date(),
+          };
+        } catch (err) {
+          console.error(`AI failed for ${place.name}:`, err.message);
 
+          place.summary = "";
+          place.description = "";
+          place.history = "";
+          place.ai_details = null;
+        }
+      }),
+    );
 
     console.log(
       "Classified Places:",
@@ -253,50 +286,47 @@ exports.getRealNearbyPlaces = async (req, res) => {
       );
     }
     console.log("After Category Filter:", categoryFiltered.length);
+
     // STEP 5: Save places into MongoDB
     const validPlaces = categoryFiltered.filter(
-  (p) =>
-    p.location.lat !== null &&
-    p.location.lng !== null &&
-    p.place_id // ✅ FILTER OUT NULL place_id
-);
+      (p) => p.location.lat !== null && p.location.lng !== null && p.place_id, // ✅ FILTER OUT NULL place_id
+    );
 
-   const placesToInsert = validPlaces.map((place) => ({
-     place_id: place.place_id,
-     name: place.name,
-     rating: place.rating,
-     total_ratings: place.total_ratings,
-     category: place.category,
-     address: place.address,
-     types: place.types,
-     is_open: place.is_open,
-     photo: place.photo,
+    const placesToInsert = validPlaces.map((place) => ({
+      place_id: place.place_id,
+      name: place.name,
+      rating: place.rating,
+      total_ratings: place.total_ratings,
+      category: place.category,
+      address: place.address,
+      types: place.types,
+      is_open: place.is_open,
+      photo: place.photo,
 
-     summary: place.summary,
-     description: place.description,
-     history: place.history,
-     ai_details: place.ai_details,
+      summary: place.summary,
+      description: place.description,
+      history: place.history,
+      ai_details: place.ai_details,
 
-     location: {
-       type: "Point",
-       coordinates: [place.location.lng, place.location.lat],
-     },
+      location: {
+        type: "Point",
+        coordinates: [place.location.lng, place.location.lat],
+      },
 
-     source: "google",
-   }));
+      source: "google",
+    }));
 
+    await Promise.all(
+      placesToInsert.map((place) =>
+        Place.updateOne(
+          { place_id: place.place_id },
+          { $set: place },
+          { upsert: true },
+        ),
+      ),
+    );
 
-await Promise.all(
-  placesToInsert.map((place) =>
-    Place.updateOne(
-      { place_id: place.place_id },
-      { $set: place },
-      { upsert: true },
-    ),
-  ),
-);
-
-console.log("AI SAMPLE:", cleanedResults[0]);
+    console.log("AI SAMPLE:", cleanedResults[0]);
 
     // STEP 6: Rank places
     const rankedResults = rankingService.rankPlaces(
@@ -304,7 +334,7 @@ console.log("AI SAMPLE:", cleanedResults[0]);
       latitude,
       longitude,
     );
-    
+
     console.log(
       "SCORES:",
       rankedResults.map((p) => ({
@@ -314,7 +344,6 @@ console.log("AI SAMPLE:", cleanedResults[0]);
         score: p.score,
       })),
     );
-
 
     res.status(200).json({
       success: true,

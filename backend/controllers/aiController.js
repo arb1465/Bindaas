@@ -1,3 +1,6 @@
+const Place = require("../models/Place");
+const { generatePlaceDetails } = require("../services/openaiService")
+
 exports.getAIPlaceDetails = async (req, res) => {
   try {
     const { id } = req.params;
