@@ -13,7 +13,7 @@ async function findNearbyPlaces(lat, lng) {
           type: "Point",
           coordinates: [lng, lat],
         },
-        $maxDistance: 5000,
+        $maxDistance: 15000,
       },
     },
   });
@@ -86,7 +86,7 @@ exports.getNearbyPlaces = async (req, res) => {
             type: "Point",
             coordinates: [longitude, latitude],
           },
-          $maxDistance: 5000,
+          $maxDistance: 15000,
         },
       },
     };

@@ -74,6 +74,9 @@ exports.generateItinerary = async (req, res) => {
       const culture = rankedPlaces.filter((p) => p.category === "Culture");
       const food = rankedPlaces.filter((p) => p.category === "Food");
 
+      console.log("Nature: ", nature)
+      console.log("Culture: ", culture)
+      console.log("Food: ", food)
       selectedPlaces = [
         ...nature.slice(0, 2),
         ...culture.slice(0, 2),

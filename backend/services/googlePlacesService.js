@@ -11,7 +11,7 @@ exports.fetchNearbyFromGoogle = async (lat, lng, type, radius = 5000) => {
     console.log("Google API Status:", response.data.status);
 
     const places = response.data.results
-      .slice(0, 10) // ✅ LIMIT RESULTS
+      .slice(0, 25) // ✅ LIMIT RESULTS
       .map((place) => ({
         place_id: place.place_id || null, // ✅ SAFE
 
@@ -34,6 +34,8 @@ exports.fetchNearbyFromGoogle = async (lat, lng, type, radius = 5000) => {
             ? exports.getPhotoUrl(place.photos[0].photo_reference) // ✅ FIXED
             : null,
       }));
+
+      console.log("Returning total no of places from Google: ", places.length)
 
     return places;
   } catch (error) {
